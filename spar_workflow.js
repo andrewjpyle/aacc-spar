@@ -8,6 +8,15 @@ export const meta = {
   ],
 }
 
+// ---- memory discovery ------------------------------------------------------
+// Claude Code stores a project's auto-memory at ~/.claude/projects/<encoded cwd>/memory, where the
+// encoded cwd is the absolute path with every non-alphanumeric character replaced by "-". Computing
+// it exactly (instead of matching a basename) means the panel can never read another project's
+// memory by accident.
+const MEMORY_DIR_COMMAND = 'D="$HOME/.claude/projects/$(pwd | sed \'s/[^A-Za-z0-9]/-/g\')/memory"; [ -d "$D" ] && echo "$D"'
+// Lesson files: both spellings are in common use.
+const FEEDBACK_PREFIXES = ['feedback_', 'feedback-']
+
 // ---- schemas ---------------------------------------------------------------
 const GROUND_SCHEMA = {
   type: 'object',
@@ -17,7 +26,7 @@ const GROUND_SCHEMA = {
     critical_landmines: {
       type: 'array',
       items: { type: 'object', additionalProperties: false, properties: { slug: { type: 'string' }, summary: { type: 'string' } }, required: ['slug', 'summary'] },
-      description: 'the CRITICAL "re-read before acting" tier from MEMORY.md — whatever landmines the user has actually catalogued, as {slug, summary}',
+      description: 'the CRITICAL "re-read before acting" tier from MEMORY.md: whatever landmines the user has actually catalogued, as {slug, summary}',
     },
     past_mistakes: {
       type: 'array',
@@ -41,7 +50,7 @@ const LENS_SCHEMA = {
         properties: {
           severity: { type: 'string', enum: ['critical', 'high', 'medium', 'low'] },
           title: { type: 'string', description: 'one-line statement of the risk' },
-          why: { type: 'string', description: 'the concrete failure mode — what breaks and how' },
+          why: { type: 'string', description: 'the concrete failure mode: what breaks and how' },
           grounded_in: { type: 'string', description: 'the feedback_* slug or CRITICAL landmine this maps to, or "general" if not tied to a catalogued lesson' },
           recommendation: { type: 'string', description: 'the specific change that would mitigate it' },
         },
@@ -75,8 +84,8 @@ const LENSES = [
     key: 'past-mistakes',
     instruction: [
       'LENS: REPEAT-OF-A-PAST-MISTAKE. The user keeps a catalog of hard-won lessons (the PAST MISTAKES list',
-      'below — each is a `feedback_*` memory). For EACH lesson this subject plausibly risks repeating, open the',
-      'actual file (paths given; use Read) and confirm the match against its real content BEFORE raising a risk —',
+      'below: each is a `feedback_*` memory). For EACH lesson this subject plausibly risks repeating, open the',
+      'actual file (paths given; use Read) and confirm the match against its real content BEFORE raising a risk -',
       'do not pattern-match on the one-line summary alone. Set grounded_in to that feedback slug. Conservative:',
       'only real, defensible repeats.',
     ].join('\n'),
@@ -86,7 +95,7 @@ const LENSES = [
     instruction: [
       'LENS: CRITICAL SAFETY LANDMINE. Check the subject against the CRITICAL "re-read before acting" landmines',
       'the user has catalogued in their own memory (the CRITICAL LANDMINES list below). Read each candidate',
-      'landmine\'s memory file to confirm the subject genuinely risks triggering it before raising it — do not',
+      'landmine\'s memory file to confirm the subject genuinely risks triggering it before raising it: do not',
       'assume a match from the one-line summary alone. grounded_in = the landmine slug. These default to',
       'high/critical severity. Work off whatever landmines the user actually has; there is no fixed list.',
     ].join('\n'),
@@ -104,7 +113,7 @@ const LENSES = [
   {
     key: 'exercised',
     instruction: [
-      'LENS: BUILT-BUT-NEVER-EXERCISED. Will this actually be validated against REAL, non-empty inputs — or could',
+      'LENS: BUILT-BUT-NEVER-EXERCISED. Will this actually be validated against REAL, non-empty inputs: or could',
       'it pass unit tests / run over empty inputs and merely LOOK successful? Demand: a concrete exercise step',
       'against live data, and an absence-of-work / "0 rows in N hours" alert for anything that ingests or watches.',
       'If those are missing, that IS the risk. grounded_in = a "built but never exercised" feedback slug if the user',
@@ -115,7 +124,7 @@ const LENSES = [
     key: 'premortem',
     instruction: [
       'LENS: PREMORTEM. It is three months later and this subject has FAILED, been abandoned, or quietly caused',
-      'harm. Enumerate the most likely causes — wrong assumptions, second-order effects, ops/maintenance burden,',
+      'harm. Enumerate the most likely causes: wrong assumptions, second-order effects, ops/maintenance burden,',
       'edge cases, the thing everyone overlooked. Be a hostile but fair critic; surface what the other lenses would',
       'miss. grounded_in = "general" unless a catalogued lesson fits.',
     ].join('\n'),
@@ -134,7 +143,7 @@ const LENSES = [
 function lensPrompt(lens, subjectLabel, subjectText, ground) {
   return [
     'You are an ADVERSARIAL reviewer on a panel sparring against a proposed plan/change in the user\'s project.',
-    'Your job is to find what is WRONG, risky, or naive — grounded in the user\'s own documented history, not',
+    'Your job is to find what is WRONG, risky, or naive: grounded in the user\'s own documented history, not',
     'generic best-practice. Apply ONLY your assigned lens; the other lenses are covered by other reviewers. Be',
     'specific, fair, and conservative: a real risk with a concrete failure mode beats a long list of vague worries.',
     'It is fine to return few or zero risks if the subject is genuinely sound on your lens.',
@@ -145,13 +154,13 @@ function lensPrompt(lens, subjectLabel, subjectText, ground) {
     subjectText,
     '── END SUBJECT ──',
     '',
-    'NORTH STAR: ' + (ground.north_star || '(none stated — reason about scale generically)'),
+    'NORTH STAR: ' + (ground.north_star || '(none stated: reason about scale generically)'),
     '',
-    'CRITICAL LANDMINES (slug — summary):',
-    (ground.critical_landmines || []).map((l) => '- ' + l.slug + ' — ' + l.summary).join('\n'),
+    'CRITICAL LANDMINES (slug: summary):',
+    (ground.critical_landmines || []).map((l) => '- ' + l.slug + ': ' + l.summary).join('\n'),
     '',
-    'PAST MISTAKES catalog (slug — summary — file):',
-    (ground.past_mistakes || []).map((m) => '- ' + m.slug + ' — ' + m.summary + (m.file ? '  [' + m.file + ']' : '')).join('\n'),
+    'PAST MISTAKES catalog (slug: summary: file):',
+    (ground.past_mistakes || []).map((m) => '- ' + m.slug + ': ' + m.summary + (m.file ? '  [' + m.file + ']' : '')).join('\n'),
     '',
     'Memory dir (to Read any feedback file in full): ' + ground.memory_dir,
     '',
@@ -179,11 +188,12 @@ function judgePrompt(subjectLabel, subjectText, ground, lensResults) {
     '',
     'NORTH STAR: ' + (ground.north_star || '(none stated)'),
     '',
-    'LENS FINDINGS (JSON, one object per lens):',
+    'LENS FINDINGS (JSON, one object per lens that completed; a lens absent here FAILED and was not run, so do not',
+    'treat its angle as clean, and name it in "Lenses applied"):',
     JSON.stringify(lensResults),
     '',
     'Return via schema. `report_markdown` = a complete report with these sections (write "none" where empty):',
-    '# Spar — ' + subjectLabel,
+    '# Spar: ' + subjectLabel,
     'Verdict (with one-line rationale) · Summary · Top risks (ranked; each: severity, the failure mode,',
     'what it is grounded_in, the fix) · Conditions to satisfy before proceeding · What this gets right',
     '(strengths) · Lenses applied. Keep it tight and skimmable; lead with the verdict.',
@@ -195,7 +205,7 @@ function judgePrompt(subjectLabel, subjectText, ground, lensResults) {
 // ---- run -------------------------------------------------------------------
 // Normalize args: the Workflow runtime can hand a JSON-encoded STRING through
 // rather than an object (esp. when the inline value has heavy escaping). Parse
-// it so a stringified payload still binds — otherwise every field silently
+// it so a stringified payload still binds: otherwise every field silently
 // defaults and the panel spars an empty subject.
 let A = args
 if (typeof A === 'string') { try { A = JSON.parse(A) } catch (e) { A = {} } }
@@ -205,7 +215,7 @@ const subjectText = A.subject_text || ''
 const subjectPath = A.subject_path || ''
 
 // FAIL LOUD on an empty subject. Proceeding would produce a confident-looking
-// verdict over nothing — the exact "looks successful over empty input" trap the
+// verdict over nothing: the exact "looks successful over empty input" trap the
 // panel exists to catch. Refuse instead of misleading.
 if (!subjectText.trim() && !subjectPath.trim()) {
   throw new Error(
@@ -218,7 +228,7 @@ if (!subjectText.trim() && !subjectPath.trim()) {
 // it directly, so nothing has to survive inline-arg escaping.
 const subjectForPrompt = subjectText.trim()
   ? subjectText
-  : '[This is a FILE PATH — use Read to open it IN FULL; its contents ARE the subject:]\n' + subjectPath
+  : '[This is a FILE PATH: use Read to open it IN FULL; its contents ARE the subject:]\n' + subjectPath
 log(`Sparring against: ${subjectLabel} (${subjectText.trim() ? subjectText.length + ' chars inline' : 'via file ' + subjectPath})`)
 
 phase('Ground')
@@ -226,27 +236,29 @@ let ground = await agent(
   [
     'Catalog the user\'s hard-won lessons so an adversarial panel can ground its critique. Use bash + Read.',
     'Steps:',
-    '1. Find the auto-memory dir for the CURRENT project. Run: `ls -d "$HOME"/.claude/projects/*/memory 2>/dev/null`.',
-    '   If several are listed, prefer the one whose path best matches the basename of the current working directory',
-    '   (run `basename "$PWD"` to get it). A repo-local `memory/` dir (`ls -d "$PWD"/memory 2>/dev/null`) is also',
-    '   accepted. Set memory_dir to the chosen absolute path (or "" if none exists).',
+    '1. Find the auto-memory dir for the CURRENT project, EXACTLY. Claude Code names it after the project path with',
+    '   every character that is not a letter or digit replaced by "-". Run this and nothing fuzzier:',
+    '     ' + MEMORY_DIR_COMMAND,
+    '   It prints the dir if it exists. If it prints nothing, try a repo-local `memory/` dir: `ls -d "$PWD"/memory 2>/dev/null`.',
+    '   NEVER pick another project\'s memory dir, even if its name looks similar: that would ground the review in the',
+    '   wrong project\'s history. Set memory_dir to the chosen absolute path, or "" if neither exists.',
     '2. Read MEMORY.md in that dir. Extract:',
-    '   - critical_landmines: every bullet under a "CRITICAL — Re-read before acting" (or similarly named CRITICAL)',
-    '     section, as {slug, summary}. The slug is the linked memory file name (e.g. feedback_xxx).',
+    '   - critical_landmines: every bullet under any heading containing "CRITICAL" (for example "CRITICAL: re-read',
+    '     before acting"), as {slug, summary}. The slug is the linked memory file name without .md.',
     '   - north_star: the North Star / scale goal statement if one is stated, else "".',
-    '3. past_mistakes: parse MEMORY.md ITSELF — it is the user\'s CURATED INDEX of these lessons. Collect every',
-    '   `feedback_*` memory it links (markdown links to feedback_*.md, e.g. [→](feedback_xxx.md) or [label](feedback_xxx.md))',
-    '   across ALL sections including the CRITICAL tier. For each, return {slug (the feedback_* filename without .md),',
-    '   summary (the one-line description around that link in MEMORY.md)}. Do NOT open each feedback_*.md file',
-    '   individually — reading MEMORY.md once is the whole job and keeps this fast and robust. Be complete FROM the index.',
-    'Missing a lesson means the panel can\'t catch its repeat, so harvest every feedback_* link. Return via schema.',
+    '3. past_mistakes: parse MEMORY.md ITSELF; it is the user\'s curated index of these lessons. Collect every linked',
+    '   lesson file whose name starts with ' + FEEDBACK_PREFIXES.map((p) => '"' + p + '"').join(' or ') + ' (both spellings are',
+    '   common), across ALL sections including the CRITICAL tier. For each, return {slug (the file name without .md),',
+    '   summary (the one-line description around that link)}. Do NOT open each file individually; reading MEMORY.md',
+    '   once is the whole job and keeps this fast. Be complete FROM the index.',
+    'Missing a lesson means the panel cannot catch its repeat, so harvest every lesson link. Return via schema.',
   ].join('\n'),
   { label: 'ground', schema: GROUND_SCHEMA, model: 'sonnet' }
 )
 if (!ground) {
   // A dropped connection mid-response must not crash the whole panel; degrade to an
   // empty catalog so the lenses still spar the subject (they can Read memory themselves).
-  log('⚠ ground agent returned null (API drop) — proceeding with an empty memory catalog')
+  log('⚠ ground agent returned null (API drop): proceeding with an empty memory catalog')
   ground = { memory_dir: '', critical_landmines: [], past_mistakes: [], north_star: '' }
 }
 log(`Grounded: ${(ground.past_mistakes || []).length} past-mistake memories + ${(ground.critical_landmines || []).length} CRITICAL landmines`)
@@ -259,12 +271,17 @@ const lensResults = (await parallel(
       phase: 'Spar',
       schema: LENS_SCHEMA,
       model: 'sonnet',
-    }).then((r) => ({ lens: lens.key, ...r }))
+    }).then((r) => (r ? { lens: lens.key, ...r } : null))
   )
 )).filter(Boolean)
 
 const totalRisks = lensResults.reduce((n, r) => n + (r.risks ? r.risks.length : 0), 0)
-log(`Panel returned ${totalRisks} risks across ${lensResults.length} lenses`)
+const missing = LENSES.length - lensResults.length
+log(`Panel returned ${totalRisks} risks across ${lensResults.length} of ${LENSES.length} lenses` +
+  (missing ? ` (${missing} lens agent(s) failed and are excluded, not counted as clean)` : ''))
+if (lensResults.length === 0) {
+  throw new Error('aacc-spar: every lens agent failed; refusing to produce a verdict from no findings.')
+}
 
 phase('Judge')
 const verdict = await agent(judgePrompt(subjectLabel, subjectForPrompt, ground, lensResults), {
@@ -273,4 +290,7 @@ const verdict = await agent(judgePrompt(subjectLabel, subjectForPrompt, ground, 
   model: 'opus',
 })
 
+if (!verdict) {
+  throw new Error('aacc-spar: the judge agent returned nothing; no verdict was produced. Re-run the workflow.')
+}
 return verdict
