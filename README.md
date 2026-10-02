@@ -76,7 +76,11 @@ The skill writes the subject to a file, runs the panel, saves the report to
 <p align="center"><img src="docs/assets/architecture.webp" alt="How it works: subject and memory feed a ground agent, six parallel lenses, an Opus judge, and a report" width="100%"></p>
 
 1. **Ground (Sonnet).** Finds your project's memory directory by its **exact** path,
-   `~/.claude/projects/<your project path, non-alphanumerics as "-">/memory`, and reads `MEMORY.md`.
+   `<config dir>/projects/<project>/memory`, where `<config dir>` is `$CLAUDE_CONFIG_DIR` or
+   `~/.claude`, and `<project>` is the git repository's main checkout (or the cwd outside git) with
+   every non-alphanumeric character replaced by `-`. That matches
+   [Claude Code's documented rule](https://code.claude.com/docs/en/memory#storage-location), so
+   worktrees and subdirectories share one memory. It then reads `MEMORY.md`.
    It collects your lesson files (`feedback_*` and `feedback-*`), anything under a CRITICAL heading,
    and your North Star if you have one. It never borrows another project's memory.
 2. **Spar (6 x Sonnet, in parallel).** Each lens attacks from one angle. The two memory lenses open

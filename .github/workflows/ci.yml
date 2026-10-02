@@ -26,6 +26,6 @@ jobs:
           node --test --test-reporter=tap test/*.test.mjs | tee tap.txt
           PASS=$(awk '/^ok /{n++} END{print n+0}' tap.txt)
           FAIL=$(awk '/^not ok /{n++} END{print n+0}' tap.txt)
-          echo "passed: $PASS failed: $FAIL floor: 12"
+          echo "passed: $PASS failed: $FAIL floor: 14"
           test "$FAIL" -eq 0
-          test "$PASS" -ge 12
+          test "$PASS" -ge 14
