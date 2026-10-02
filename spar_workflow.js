@@ -9,11 +9,16 @@ export const meta = {
 }
 
 // ---- memory discovery ------------------------------------------------------
-// Claude Code stores a project's auto-memory at ~/.claude/projects/<encoded cwd>/memory, where the
-// encoded cwd is the absolute path with every non-alphanumeric character replaced by "-". Computing
-// it exactly (instead of matching a basename) means the panel can never read another project's
-// memory by accident.
-const MEMORY_DIR_COMMAND = 'D="$HOME/.claude/projects/$(pwd | sed \'s/[^A-Za-z0-9]/-/g\')/memory"; [ -d "$D" ] && echo "$D"'
+// Claude Code stores a project's auto-memory at <config dir>/projects/<project>/memory. <config dir>
+// is $CLAUDE_CONFIG_DIR or ~/.claude. <project> is the project root (the main checkout of the git
+// repository, so worktrees and subdirectories share it; the cwd outside git) with every
+// non-alphanumeric character replaced by "-". Computing it exactly (instead of matching a basename)
+// means the panel can never read another project's memory by accident.
+const MEMORY_DIR_COMMAND = [
+  'R="$(git worktree list --porcelain 2>/dev/null | sed -n \'1s/^worktree //p\')"; [ -n "$R" ] || R="$(pwd)";',
+  'D="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/$(printf %s "$R" | sed \'s/[^A-Za-z0-9]/-/g\')/memory";',
+  '[ -d "$D" ] && echo "$D"',
+].join(' ')
 // Lesson files: both spellings are in common use.
 const FEEDBACK_PREFIXES = ['feedback_', 'feedback-']
 
@@ -236,8 +241,10 @@ let ground = await agent(
   [
     'Catalog the user\'s hard-won lessons so an adversarial panel can ground its critique. Use bash + Read.',
     'Steps:',
-    '1. Find the auto-memory dir for the CURRENT project, EXACTLY. Claude Code names it after the project path with',
-    '   every character that is not a letter or digit replaced by "-". Run this and nothing fuzzier:',
+    '1. Find the auto-memory dir for the CURRENT project, EXACTLY. Claude Code names it after the project root (the',
+    '   main checkout of the git repository, so worktrees and subdirectories share it; the cwd outside git) with every',
+    '   character that is not a letter or digit replaced by "-", under $CLAUDE_CONFIG_DIR or ~/.claude. Run EXACTLY this',
+    '   command from the current working directory, and nothing fuzzier:',
     '     ' + MEMORY_DIR_COMMAND,
     '   It prints the dir if it exists. If it prints nothing, try a repo-local `memory/` dir: `ls -d "$PWD"/memory 2>/dev/null`.',
     '   NEVER pick another project\'s memory dir, even if its name looks similar: that would ground the review in the',

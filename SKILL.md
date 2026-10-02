@@ -51,11 +51,13 @@ about scale generically.
 
 ## How to run
 
-1. **Run from the root of the project you want the panel grounded in.** The workflow finds that
-   project's Claude Code auto-memory dir by its exact path: `~/.claude/projects/<cwd with every
-   non-alphanumeric character replaced by "-">/memory` (a repo-local `memory/` dir is also accepted).
-   It never borrows another project's memory, so running from the right project is what grounds the
-   critique in *your* history.
+1. **Run from inside the project you want the panel grounded in.** The workflow finds that
+   project's Claude Code auto-memory dir by its exact path: `<config dir>/projects/<project>/memory`,
+   where `<config dir>` is `$CLAUDE_CONFIG_DIR` or `~/.claude`, and `<project>` is the project root
+   (the git repository's main checkout, so worktrees and subdirectories share it; the cwd outside
+   git) with every non-alphanumeric character replaced by "-" (a repo-local `memory/` dir is also
+   accepted). It never borrows another project's memory, so running from the right project is what
+   grounds the critique in *your* history.
 2. **Assemble the subject INTO A FILE**: this is the key step, because the workflow runs headless
    and the sub-agents cannot see this conversation. **Always write the subject to a temp file and
    pass its path** (`subject_path`), not a giant inline string: a big diff full of quotes/backslashes
