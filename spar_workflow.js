@@ -15,7 +15,7 @@ export const meta = {
 // memory by accident.
 const MEMORY_DIR_COMMAND = 'D="$HOME/.claude/projects/$(pwd | sed \'s/[^A-Za-z0-9]/-/g\')/memory"; [ -d "$D" ] && echo "$D"'
 // Lesson files: both spellings are in common use.
-const FEEDBACK_PREFIXES = ['feedback_', 'feedback-']
+const FEEDBACK_PREFIXES = ['feedback_']
 
 // ---- schemas ---------------------------------------------------------------
 const GROUND_SCHEMA = {
